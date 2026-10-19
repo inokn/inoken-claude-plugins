@@ -17,6 +17,11 @@ import re
 import shutil
 import sys
 
+# Windows で .sh を通さず直接実行しても、日本語や © を cp932 で出そうとして落ちないように
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
+
 
 def slug(s):
     s = re.sub(r"^img/", "", s or "")

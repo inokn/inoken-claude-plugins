@@ -31,6 +31,9 @@ npm install          # puppeteer-core のみ。ブラウザ本体は既存の Ch
 ./preflight.sh
 ```
 
+`node_modules` はスキルのフォルダの中に入る。プラグインとして入れている場合、**プラグインが更新されると
+新しい版のフォルダには `node_modules` が無い**ので、`npm install` をやり直す（`preflight.sh` が ✗ で教えてくれる）。
+
 `preflight.sh` が全部 ✓ になれば準備完了。Claude Code に
 「このカンプをHTMLにして」「イラレのデザインをコーディングして」等と頼むと起動する。
 
@@ -88,8 +91,11 @@ SK=~/.claude/skills/illustrator-to-html
 # カンプを読む → design_spec/design.spec.json と PNG
 "$SK/scripts/ai2spec.sh" design.ai -o ./spec
 
-# 実装を照合する
+# 実装を照合する（--threshold 0.5 で小さなズレも一覧に出す）
 "$SK/scripts/check.sh" index.html ./spec/design.spec.json 1440
+
+# Python を直接呼ぶとき（Windows は python3 ではなく py -3）
+py -3 "$SK/scripts/compare.py" ./spec/design.spec.json index.check.json --threshold 0.5
 ```
 
 ## 含まれないもの

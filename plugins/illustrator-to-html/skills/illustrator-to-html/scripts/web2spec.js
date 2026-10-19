@@ -174,14 +174,29 @@ function findChrome() {
     return {
       title: document.title,
       pageWidth: document.documentElement.scrollWidth,
-      pageHeight: document.documentElement.scrollHeight,
+      // scrollHeight はビューポートより小さくならない（内容が 900px でも 1000 と出る）ので、
+      // body と全要素の下端から内容の実寸を出す
+      pageHeight: (() => {
+        let bottom = document.body.getBoundingClientRect().bottom;
+        for (const el of document.body.querySelectorAll('*')) {
+          const r = el.getBoundingClientRect();
+          if (r.height > 0 && r.bottom > bottom) bottom = r.bottom;
+        }
+        return Math.round((bottom + window.scrollY) * 100) / 100;
+      })(),
       bodyBg: rgb(getComputedStyle(document.body).backgroundColor),
       nodes: out,
     };
   });
 
   require('fs').writeFileSync(OUT, JSON.stringify(data, null, 1));
-  await page.screenshot({ path: OUT.replace(/\.json$/, '.png'), fullPage: true });
+  // 内容がビューポートより短いときは、余白の帯が写らないよう内容の高さで切る
+  const shotPath = OUT.replace(/\.json$/, '.png');
+  if (data.pageHeight < page.viewport().height) {
+    await page.screenshot({ path: shotPath, clip: { x: 0, y: 0, width: data.pageWidth, height: Math.ceil(data.pageHeight) } });
+  } else {
+    await page.screenshot({ path: shotPath, fullPage: true });
+  }
   console.log(`${data.title} / ${data.pageWidth}x${data.pageHeight} / nodes=${data.nodes.length}`);
   await browser.close();
 })();

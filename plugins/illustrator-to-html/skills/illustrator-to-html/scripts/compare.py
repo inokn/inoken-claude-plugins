@@ -22,6 +22,11 @@ import re
 import sys
 import statistics
 
+# Windows で .sh を通さず直接実行しても、日本語や © を cp932 で出そうとして落ちないように
+for _s in (sys.stdout, sys.stderr):
+    if hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
+
 def norm(t):
     return re.sub(r"\s+", "", t or "")
 
@@ -131,7 +136,7 @@ def main():
     dx = [r[3] for r in rows]
     bad = sorted([r for r in rows if abs(r[2]) > thr or abs(r[3]) > thr])
 
-    print("照合 %d 件 / しきい値%.0fpx超 %d 件 / 未照合 %d 件"
+    print("照合 %d 件 / しきい値%gpx超 %d 件 / 未照合 %d 件"
           % (len(rows), thr, len(bad), len(unmatched)))
     print("Δy 中央 %+.1f 最大 %+.1f   |   Δx 中央 %+.1f 最大 %+.1f"
           % (statistics.median(dy), max(dy, key=abs),

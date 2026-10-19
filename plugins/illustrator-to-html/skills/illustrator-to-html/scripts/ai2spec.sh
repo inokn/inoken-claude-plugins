@@ -112,7 +112,7 @@ case "$RESULT" in
     PNGS="$(printf '%s' "$RESULT" | cut -f3)"
     echo "JSON: $JSON"
     if [ -n "$PNGS" ]; then
-      printf '%s' "$PNGS" | tr '|' '\n' | while IFS= read -r p; do echo "PNG:  $(from_ai "$p")"; done
+      printf '%s\n' "$PNGS" | tr '|' '\n' | while IFS= read -r p; do echo "PNG:  $(from_ai "$p")"; done
     fi
     # 何に対して揃っているか（アンカー）の手がかりを JSON に追記して表示する。
     # カンプ幅だけ見ていると右端基準と中央基準の区別がつかないため、ここで先に確定させる。

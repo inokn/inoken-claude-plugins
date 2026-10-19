@@ -2,7 +2,10 @@
 #
 # check.sh - 実装HTMLをChromeでレンダリングし、カンプの仕様JSONと突き合わせる
 #
-#   ./check.sh <index.html> <comp.spec.json> [幅(既定1440)] [--no-anchor]
+#   ./check.sh <index.html> <comp.spec.json> [幅(既定1440)] [--no-anchor] [--threshold 0.5]
+#
+# パスはカレントディレクトリ基準（絶対パスでもよい）。
+# --threshold で「ズレの大きい順」に出す基準（既定4px）を変えられる。仕上げは 0.5 にして残りを全部見る。
 #
 # 出力: ズレの一覧（Δy/Δx）、横アンカーの判定、実装のフルページPNG（HTMLの隣に .check.png）
 #
@@ -20,11 +23,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 need_py
 
 ANCHOR="true"
+THRESHOLD=()
 ARGS=()
-for a in "$@"; do
-  case "$a" in
-    --no-anchor) ANCHOR="false" ;;
-    *) ARGS+=("$a") ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-anchor) ANCHOR="false"; shift ;;
+    --threshold) THRESHOLD=(--threshold "${2:?--threshold には数値が必要です}"); shift 2 ;;
+    *) ARGS+=("$1"); shift ;;
   esac
 done
 set -- "${ARGS[@]}"
@@ -47,7 +52,7 @@ OUT="${HTML_ABS%.html}.check.json"
 # file:// の組み立ては web2spec.js 側で行う（Windows の C:/… を正しく URL にするため）
 ( cd "$HERE" && node web2spec.js "$(to_native "$HTML_ABS")" "$WIDTH" "$(to_native "$OUT")" >/dev/null )
 
-"${PY[@]}" "$(to_native "$HERE/compare.py")" "$(to_native "$SPEC")" "$(to_native "$OUT")"
+"${PY[@]}" "$(to_native "$HERE/compare.py")" "$(to_native "$SPEC")" "$(to_native "$OUT")" ${THRESHOLD[@]+"${THRESHOLD[@]}"}
 
 if [ "$ANCHOR" = "true" ] && [ -f "$HERE/anchors.py" ]; then
   WIDE=$((WIDTH + 300))
