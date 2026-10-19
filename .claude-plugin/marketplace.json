@@ -1,0 +1,15 @@
+{
+  "name": "inoken-ai",
+  "description": "inoken.ai が提供する Claude Code 用プラグイン",
+  "owner": {
+    "name": "inoken.ai",
+    "email": "k.inoue@inoken.ai"
+  },
+  "plugins": [
+    {
+      "name": "illustrator-to-html",
+      "source": "./plugins/illustrator-to-html",
+      "description": "Illustratorのカンプ(.ai)から実測値を取り出してHTML/CSSを実装し、レンダリングして数値で照合する（Windows / macOS）"
+    }
+  ]
+}

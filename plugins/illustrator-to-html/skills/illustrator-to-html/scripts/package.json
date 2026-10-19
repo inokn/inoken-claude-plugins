@@ -1,0 +1,6 @@
+{
+  "name": "illustrator-web2spec",
+  "private": true,
+  "description": "Chromeでレンダリングしたページの実測値を取るための最小依存",
+  "dependencies": { "puppeteer-core": "^24.0.0" }
+}

@@ -1,0 +1,5 @@
+node_modules/
+*.check.json
+*.check.png
+*.check-wide.json
+.DS_Store

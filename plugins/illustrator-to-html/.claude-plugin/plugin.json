@@ -1,0 +1,9 @@
+{
+  "name": "illustrator-to-html",
+  "version": "1.0.0",
+  "description": "Illustratorのカンプ(.ai)から実測値を取り出してHTML/CSSを実装し、レンダリングして数値で照合する（Windows / macOS）",
+  "author": {
+    "name": "inoken.ai",
+    "email": "k.inoue@inoken.ai"
+  }
+}

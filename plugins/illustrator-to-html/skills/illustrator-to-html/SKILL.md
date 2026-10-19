@@ -1,0 +1,119 @@
+---
+name: illustrator-to-html
+description: "This skill should be used when the user asks to \"イラレのデザインをHTMLに\", \"カンプをHTMLに\", \"aiファイルをコーディング\", \"デザインカンプを実装\", \"Illustratorのデザインをコーディングして\", \"デザインをHTMLに起こして\", or wants to implement an Illustrator (.ai) design comp as HTML/CSS."
+argument-hint: "[.aiファイルのパス] [出力先ディレクトリ]"
+---
+
+# Illustratorカンプ → HTML実装
+
+`.ai` から実測値を取り出し、それを仕様書としてHTML/CSSを書き、**レンダリングして数値で照合する**までを行う。
+目分量で作って終わりにしない。最後に必ずΔy/Δxを出す。
+
+## 前提
+
+**Claude Code（PC上のターミナル / デスクトップアプリの Code タブ）専用。** Illustrator をローカルで操作するため、
+claude.ai のチャットや Cowork では動かない。そこで頼まれたら、PC の Claude Code で頼み直すよう案内して終える。
+
+必要なものはすべて `scripts/` 内で完結する（このスキルのフォルダを渡せばそのまま動く）。
+以降 `$SK` はこのスキルのディレクトリ（スキル読み込み時に表示されるベースディレクトリ）を指す。
+個人用・プロジェクト用・プラグイン経由のどれで入っていても、表示されたパスを使う。
+
+```bash
+SK="<このスキルのベースディレクトリ>"
+"$SK/scripts/preflight.sh"        # 環境チェック。足りないものがあればここで止まる
+```
+
+初回のみ `cd "$SK/scripts" && npm install`（puppeteer-core のみ。ブラウザ本体は既存の Chrome / Edge を使う）。
+
+**macOS と Windows の両方で動く。** どちらも Adobe Illustrator + Chrome（Windows は Edge でも可）+ node + Python 3 が要る。
+
+- macOS: Illustrator を `osascript` で操作する
+- Windows: Claude Code の Bash（Git Bash）から PowerShell + COM で操作する。Illustrator が起動していなければ自動で起動する。
+  初回起動時のログインや更新案内のダイアログが出ている間は失敗するので、そのときは閉じて再実行する
+- Python を直接呼ぶときは、Windows では `python3` ではなく `py -3` を使う（`python3` は Microsoft Store のスタブのことがある）。
+  `.sh` スクリプトは自動で正しい Python を選ぶ
+- ブラウザの場所は `CHROME_PATH`、Illustrator の版は `AI_PROGID`（Windows のみ。例: `Illustrator.Application.30`）で上書きできる
+
+## フェーズ 1: カンプを読む
+
+```bash
+"$SK/scripts/ai2spec.sh" <design.ai> -o <workdir>
+```
+
+`<name>.spec.json`（実測値）と `<name>_ab1@2x.png`（見た目）が出る。**両方を読む。**
+JSONだけだと全体の意図が分からず、PNGだけだと数値が目測になる。
+
+`warnings` に目を通す。CMYKドキュメントなら色は近似値。
+
+## フェーズ 2: 設計を読み取る
+
+JSONを y 昇順に並べて全体像を掴む。以下を確定させてから書き始める。
+
+1. **アートボード寸法** → 実装幅の基準
+2. **本文カラム** — 繰り返し要素の x と w から割り出す（例: x=180/w=1080 → `max-width:1080px` 中央寄せ）
+3. **全幅の帯** — w がアートボード幅と一致する矩形
+4. **セクション境界と、その間の余白**
+5. **`tokens.colors`** → CSSカスタムプロパティ。`roles` で用途が分かる
+6. **`tokens.fonts`** → フォントスタックへの変換は `references/pitfalls.md` の対応表を使う
+7. **繰り返し要素** — カード・ボタンの x の差から `gap` を算出
+
+## フェーズ 3: 実装
+
+**絶対配置で再現しない。** 通常フローで組み、カンプ幅で数値が合うよう余白を決める。
+絶対配置はレスポンシブにできず、文言が変わると破綻する。
+
+- セマンティックに（`header`/`nav`/`main`/`section`/`footer`、見出しはh1→h2→h3の順）
+- テキストの配置基準は `box` ではなく `baseline`
+- 画像は `assets.py` で取り出す。カンプが画像を持たない場合だけプレースホルダにする
+  （`.ai` は埋め込み画像の元ファイルのパスを覚えている。詳細は `references/pitfalls.md`）
+- レスポンシブ（ブレークポイントはカンプに無いので実装側の判断。決めたら報告する）
+- 書き始める前に `references/pitfalls.md` を読む
+
+## フェーズ 4: 検証ループ（このスキルの本体）
+
+```bash
+"$SK/scripts/check.sh" <index.html> <comp.spec.json> [幅]
+```
+
+カンプと実装のテキストを**行頭ベースライン座標**で突き合わせ、Δy/Δxを出す。
+
+**Δy中央値が0になるまで繰り返す。** 手順:
+
+1. `check.sh` を実行
+2. ズレを**カンプy昇順**で見る。下流のズレは上流の累積なので、**一番上のセクションから潰す**
+3. 原因を `references/pitfalls.md` で照合し、CSSを直す
+4. 1に戻る
+
+3〜4周で Δy中央値 ±0.0 / 最大数px に収束する。収束しない場合は、
+そのセクションの構造（フロー vs 絶対配置、grid/flexの当て先）を疑う。
+
+### 直してはいけないズレ
+
+- **アイコン分の余白** — 元デザインのアイコンフォントはカンプに含まれないため、その行のテキストだけ一定量ずれる。実装側は素直に配置するのが正しい
+- **カンプで1行ずつ別テキストに分かれている箇所** — HTMLでは1要素に結合されるので未照合になる。正常
+
+最後にモバイル幅（390px等）でもレンダリングし、崩れがないか目視する。
+
+## フェーズ 5: 報告
+
+- Δy/Δxの中央値・最大値、総高さの一致
+- **残差の内訳**（実装の誤りか、カンプ側の限界か）を明示する
+- カンプで解釈が割れた箇所と、選んだ解釈（重なり順など）
+- カンプに無くて実装で決めたもの（ブレークポイント、ナビの中身、alt文言）
+
+数値を出さずに「実装しました」で終えない。
+
+## 構成
+
+| ファイル | 役割 |
+|---|---|
+| `scripts/preflight.sh` | 環境チェック。最初に走らせる |
+| `scripts/ai2spec.sh` + `ai2json.jsx` | `.ai` → 仕様JSON + PNG（フェーズ1）。Windows では `ai_run.ps1` 経由 |
+| `scripts/_env.sh` | OS差（macOS / Windows）の吸収。各 `.sh` が読み込む |
+| `scripts/check.sh` | レンダリング + 照合（フェーズ4） |
+| `scripts/web2spec.js` | Chrome / Edge での実測。`check.sh` から呼ばれる |
+| `scripts/compare.py` | 照合本体。単体でも使える |
+| `scripts/assets.py` | カンプの埋め込み画像をHTML用に取り出す |
+| `references/pitfalls.md` | ズレの症状→原因→対処、フォント対応表、重なり順とメディアクエリの罠 |
+
+配布・導入手順は `README.md`。
