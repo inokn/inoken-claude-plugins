@@ -4,7 +4,8 @@
 #
 #   run.sh preflight              環境チェック
 #   run.sh setup                  点検ツール（phpcs + PHPCompatibility）を入れる / 更新する
-#   run.sh baseline               作業フォルダを git で記録し、取得時点の状態に印を付ける
+#   run.sh baseline               パスワードを伏せてから、作業フォルダを git で記録する
+#   run.sh mask [--add <file> <行> | --status]  パスワードを伏せる（人が指定した行を追加で伏せる）
 #   run.sh target <今のPHP版>      移行先のPHPを決める（例: run.sh target 8.2.32）
 #   run.sh inventory              サイトの種類・WordPress本体・プラグイン・テーマを調べる
 #   run.sh scan                   互換性を点検する
@@ -26,10 +27,10 @@ case "$cmd" in
   preflight) exec bash "$HERE/preflight.sh" "$@" ;;
   setup)     exec bash "$HERE/setup-tools.sh" "$@" ;;
   baseline)  exec bash "$HERE/baseline.sh" "$@" ;;
-  target|inventory|scan|report|recode|finalize)
+  target|inventory|scan|report|recode|mask|finalize)
     need_py
     exec "${PY[@]}" "$(to_native "$HERE/$cmd.py")" "$@" ;;
   *)
-    sed -n '3,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '3,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 2 ;;
 esac

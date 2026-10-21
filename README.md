@@ -29,6 +29,7 @@
 ```
 
 - `enabledPlugins` に書いたプラグインだけが入ります。使わないものは行ごと消してください
+- php-upgrade を使う場合は、パスワードのファイルを読めなくする `permissions.deny` もあわせて設定してください（[プラグインの README](plugins/php-upgrade/skills/php-upgrade/README.md#パスワードの扱い2段構え)）
 - すでに Managed settings に設定がある場合は、上のキーをその JSON に足してください（丸ごと置き換えると既存の設定が消えます）
 - `autoUpdate: true` で、このリポジトリの更新が自動で各 PC に届きます
 - 届いたかは、各 PC で Claude Code を起動して `/plugin` を開くと確認できます

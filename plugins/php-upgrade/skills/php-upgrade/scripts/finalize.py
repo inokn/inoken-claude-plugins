@@ -2,9 +2,12 @@
 
 - 未コミットの修正があればコミットする（手元の git だけ）
 - 取得時点（タグ php-upgrade-baseline）からの差分を出す
-    .php-upgrade/修正差分.patch       差分（レビュー用）
+    .php-upgrade/アップロード用/        上げるファイル（伏せたパスワードを本物に戻したもの）
+    .php-upgrade/修正差分.patch       差分（レビュー用。パスワードは伏せたまま）
     .php-upgrade/アップロード一覧.txt   検証環境・本番へ上げるファイル
-    .php-upgrade/元ファイル/           変更前のファイル（問題が出たときに上げ直して戻す）
+    .php-upgrade/元ファイル/           変更前のファイル（問題が出たときに上げ直して戻す。本物の値に戻してある）
+
+作業フォルダの中のファイルはパスワードが伏せてあるので、そのまま上げるとサイトが止まる。必ずアップロード用/ から上げる。
     .php-upgrade/作業票.md             検証 → 本番 → 戻し方 のチェックリスト
 """
 import argparse
@@ -14,6 +17,7 @@ import subprocess
 from pathlib import Path
 
 from common import OUT, die, load_json, notes, require, today
+from secrets_lib import PH_RE, load_store, state, unmask_bytes
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--allow-stale", action="store_true", help="修正後に点検し直していなくても作る")
@@ -63,22 +67,44 @@ if stale and not a.allow_stale:
 
 # 差分・一覧・元ファイル
 (OUT / "修正差分.patch").write_bytes(git("diff", "--binary", BASE, "HEAD", "--", ".", ":(exclude).php-upgrade"))
-orig = OUT / "元ファイル"
-if orig.exists():
-    shutil.rmtree(orig)
+# 伏せた値を本物に戻して書き出す（作業フォルダの中は伏せたまま）
+mst = state()
+store = load_store(mst)
+if mst["files"] and not store:
+    die("伏せたパスワードの保存先が見つかりません。点検ツールの置き場所（secrets/）を消していないか確認してください。")
+
+
+def export(dst, data, where):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        dst.write_bytes(unmask_bytes(data, store, where))
+    except ValueError as e:
+        die(str(e))
+
+
+orig, upd = OUT / "元ファイル", OUT / "アップロード用"
+for d in (orig, upd):
+    if d.exists():
+        shutil.rmtree(d)
 up, dele, added = [], [], []
 for status, path in changes:
     if status in ("M", "D", "T"):
-        dst = orig / path
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(git("show", f"{BASE}:{path}"))
+        export(orig / path, git("show", f"{BASE}:{path}"), path)
+    if status != "D":
+        export(upd / path, Path(path).read_bytes(), path)
     if status == "D":
         dele.append(path)
     else:
         up.append(path)
         if status == "A":
             added.append(path)
-lst = ["# アップロードするファイル（サイトのルートからの相対パス）"] + up
+# 書き出したものに印が残っていないか（残っていたらサイトが止まる）
+left = [str(p) for d in (orig, upd) if d.exists() for p in d.rglob("*") if p.is_file() and PH_RE.search(p.read_bytes())]
+if left:
+    die("本物の値に戻せなかったファイルがあります（印が残っている）: " + ", ".join(left[:5]))
+
+lst = ["# アップロードするファイル（サイトのルートからの相対パス）",
+       "# ⚠️ 上げるのは .php-upgrade/アップロード用/ の中のファイル。作業フォルダの中のファイルはパスワードが伏せてある"] + up
 if dele:
     lst += ["", "# サーバーから削除するファイル（手作業。削除前にバックアップ）"] + dele
 (OUT / "アップロード一覧.txt").write_text("\n".join(lst) + "\n", encoding="utf-8")
@@ -102,7 +128,9 @@ if pre:
     L.append("- [ ] 次の更新・確認を検証環境で行う")
     L += [f"    - [ ] {t}" for t in pre]
 if up:
-    L.append("- [ ] `アップロード一覧.txt` のファイルを検証環境へアップロード（フォルダ構成をそのまま）")
+    L.append("- [ ] **`.php-upgrade/アップロード用/` の中身**を、フォルダ構成をそのまま検証環境へアップロード（一覧は `アップロード一覧.txt`）")
+    if mst["files"]:
+        L.append("    - ⚠️ 作業フォルダの中のファイルはパスワードが伏せてある（`__PHPUP_SECRET_…__`）。**作業フォルダから直接上げるとサイトが止まる**")
 if dele:
     L.append("- [ ] `アップロード一覧.txt` の「削除するファイル」を検証環境から削除")
 extra = notes()
@@ -131,4 +159,5 @@ print(f"修正したファイル: {len(up)} 件" + (f" ／ 削除: {len(dele)} �
 for p in up[:20]:
     print(f"  {p}")
 print(f"作業票: {OUT / '作業票.md'}")
-print(f"差分: {OUT / '修正差分.patch'} ／ 一覧: {OUT / 'アップロード一覧.txt'} ／ 元ファイル: {orig}/")
+print(f"アップロード用: {upd}/ ／ 元ファイル: {orig}/（どちらも本物の値に戻してある）")
+print(f"差分: {OUT / '修正差分.patch'} ／ 一覧: {OUT / 'アップロード一覧.txt'}")

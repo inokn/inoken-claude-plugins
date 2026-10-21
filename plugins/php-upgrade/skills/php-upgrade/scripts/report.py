@@ -314,19 +314,28 @@ if not patch_only:
             L.append(f"⚠️ 点検ツールが読めなかったファイルが {len(scan['tool_errors'])} 件あります（scan.json の tool_errors）。手で確認してください。")
             L.append("")
 
-sl = inv.get("secret_like") or []
-if sl:
-    L.append("## 🔒 パスワードらしき値を含むファイル")
+mf = inv.get("masked_files") or []
+L.append("## 🔒 パスワードを伏せたファイル")
+L.append("")
+if mf:
+    L.append("次のファイルのパスワードらしき値は、Claude が読む前に手元で `__PHPUP_SECRET_…__` に置き換えてあります（本物の値は作業フォルダの外に保存）。"
+             "アップロード用のファイルを作るときだけ本物に戻します。")
     L.append("")
-    L.append("次のファイルには、DB のパスワードなどが直接書かれているようです。点検・修正の対象ですが、**値はレポートや会話に書き写していません**。")
-    L.append("")
-    for x in sl[:30]:
+    for x in mf[:30]:
         L.append(f"- `{x}`")
-    if len(sl) > 30:
-        L.append(f"- ほか {len(sl) - 30} 件")
+    if len(mf) > 30:
+        L.append(f"- ほか {len(mf) - 30} 件")
+else:
+    L.append("パスワードらしき値は見つかりませんでした。")
+L.append("")
+L.append("**ほかにパスワード・APIキーなどが書かれたファイルがあれば、ファイル名と行番号を教えてください**（`run.sh mask --add <ファイル> <行>` で伏せます。中身は見ません）。"
+         "見つけ方は書き方から推測しているため、変わった書き方のものは漏れることがあります。")
+L.append("")
+if inv.get("secret_left"):
+    L.append("⚠️ まだ伏せていない値が残っていそうなファイル: " + ", ".join(f"`{x}`" for x in inv["secret_left"][:10]) + " → `run.sh mask` を実行")
     L.append("")
-    L.append("公開ディレクトリにパスワードを直書きしている状態は、PHP の移行とは別に見直しを勧めます（設定ファイルを公開ディレクトリの外へ移す、など）。")
-    L.append("")
+L.append("公開ディレクトリにパスワードを直書きしている状態は、PHP の移行とは別に見直しを勧めます（設定ファイルを公開ディレクトリの外へ移す、など）。")
+L.append("")
 
 enc = inv.get("encodings") or {}
 if enc:
