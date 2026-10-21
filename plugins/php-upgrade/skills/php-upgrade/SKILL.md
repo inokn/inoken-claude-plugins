@@ -1,0 +1,131 @@
+---
+name: php-upgrade
+description: "This skill should be used when the user asks to \"PHPのバージョンを上げたい\", \"PHP移行チェック\", \"PHPのアップデートができるか点検して\", \"PHP 8.2に上げられるか\", \"WordPressのPHPを上げたい\", \"PHPの脆弱性対応\", \"このサイトのPHPを点検して\", or wants to check and fix a downloaded PHP / WordPress site so it can move to a patched PHP version."
+argument-hint: "[今のPHPのバージョン（例: 8.0.30）]"
+---
+
+# PHP 移行点検（脆弱性の修正版へ上げる）
+
+FTP などで手元に持ってきたサイトのフォルダの中で、**移行先の PHP で動くかを点検し、自作コードを直して、差分と人向けの作業票を出す**。
+サーバーへのアップロード・PHP の切り替えは人が行う。このスキルはサーバーに一切接続しない。
+
+## 前提
+
+- **PC 上の Claude Code 専用**（ターミナル / デスクトップアプリの Code タブ）。claude.ai のチャットで頼まれたら、PC の Claude Code で頼み直すよう案内して終える
+- **カレントディレクトリ＝サイトのルート**（`index.php` や `wp-content/` がある階層）。違う場所なら、どこがサイトのルートか聞いて `cd` する
+- 以降 `$SK` はこのスキルのディレクトリ（スキル読み込み時に表示されるベースディレクトリ）。すべての操作は `"$SK/scripts/run.sh" <コマンド>` で行う
+- Windows では Claude Code の Bash（Git Bash）で動く。Python は `run.sh` が選ぶので、`.py` を直接呼ばない
+
+```bash
+SK="<このスキルのベースディレクトリ>"
+"$SK/scripts/run.sh" preflight     # 環境チェック。✗ があれば → の手順を案内して止まる
+"$SK/scripts/run.sh" setup         # 点検ツールが未導入のときだけ（初回のみ・数分）
+```
+
+## 守ること（安全ルール）
+
+1. **サーバーに接続しない。** ftp / sftp / rclone / WinSCP / curl のアップロードなど、サーバーへ送るコマンドは使わない。頼まれても、作業票に書いて人に渡す
+2. **認証情報を読まない。** `wp-config.php`、`.env`、`*.sql` を Read / cat / grep しない。中身を表示しない（スクリプトも開かない）
+3. **作業フォルダの外を変更しない。** WordPress 本体・WordPress.org 配布のプラグイン・有料プラグインのファイルは直さない（`references/wordpress.md`）
+4. **Shift_JIS / EUC-JP のファイルは `run.sh recode` を通して直す**（`references/php-changes.md` 4章）
+5. `wp-content/uploads` に PHP が見つかったら、**開いて実行したり消したりしない**。報告だけする（改ざんの疑い）
+
+## フェーズ 1: 確認と記録
+
+1. ここがサイトのルートか確認する（`ls`）。WordPress なら `wp-includes/` がある
+2. 今の PHP のバージョンを聞く（棚卸し表の「PHP Ver.」の値。引数で渡されていればそれ）
+3. 記録と移行先の決定:
+
+```bash
+"$SK/scripts/run.sh" baseline           # git で今の状態を記録（手元だけ）
+"$SK/scripts/run.sh" target 8.0.30      # 移行先を決める
+```
+
+移行先の決め方は `references/triage.md`。**同じ系列内のパッチ更新（例: 8.2.32 → 8.2.35）なら点検は不要**で、フェーズ 4 に進んでよい。
+ユーザーが別の移行先（例: 8.3）を望んだら `--target 8.3` を付ける。
+
+`baseline` が「未コミットの変更があります」で止まったら、前回の作業の続きかもしれない。`git status` を見せて人に確認する。
+
+## フェーズ 2: 棚卸し
+
+```bash
+"$SK/scripts/run.sh" inventory
+```
+
+サイトの種類、WordPress 本体の版、プラグイン・テーマの出どころ（WordPress.org / ディレクトリ外 / 自作）を調べ、点検するファイルを選ぶ。
+**ディレクトリ外（`external`）のものがあれば、自作か有料かを人に聞く**（見分け方は `references/wordpress.md`）。自作と分かったら修正の対象にする。
+
+## フェーズ 3: 点検
+
+```bash
+"$SK/scripts/run.sh" scan
+```
+
+PHPCompatibility で移行先の系列（例: 8.2）を指定して点検する。移行先と同じ系列の PHP があれば（`PHP_LINT_BIN`）構文チェックもする。
+
+## フェーズ 4: 判定とレポート
+
+```bash
+"$SK/scripts/run.sh" report
+```
+
+`.php-upgrade/report.md` を読み、要点を人に伝える:
+
+- 判定（A / B / C / D）と理由。**8.2 への移行なら、8.2 は 2026-12-31 でセキュリティ修正が終わる応急処置だと必ず添える**
+- やること（必須 / 修正 / 確認）
+- 文字コードの注意、uploads 内の PHP、複数の WordPress などの注意書き
+
+判定が A / B なら、コードの修正は無いのでフェーズ 6 へ。C ならフェーズ 5。D なら、直すか作り直すかを人に決めてもらってから進む。
+
+## フェーズ 5: 修正（判定 C）
+
+**直してよいのは、自作のコード（`site` / `orphan` / `mu-plugins` / `dropins` / 自作と確認できたプラグイン・テーマ）だけ。**
+
+1. `.php-upgrade/scan.json` の `issues` を部品ごとに見る。直し方は `references/php-changes.md` 1〜2章
+2. Shift_JIS などのファイルは `run.sh recode open` → 修正 → `run.sh recode close`
+3. 1箇所ずつ最小限に直す。**今の版と移行先の両方で動く書き方**にする（PHP を元に戻せば戻せるように）
+4. 点検で見つからない落とし穴（`php-changes.md` 3章）を、自作の範囲で Grep して確認する。特に **8.1 からの mysqli の例外**と **8.2 の動的プロパティ**。
+   直したもの・検証環境で人に見てほしいものは、**`.php-upgrade/確認事項.md` に「- 」で始まる1行ずつ**書く（例: `- 注文フォームの送信（mysqli に置き換えた。DB への保存を確認）`）。
+   report.md と作業票.md は毎回作り直されるので、直接書き込まない。確認事項.md に書けば両方に載る
+5. 点検し直す。エラーがゼロになるまで 1〜4 を繰り返す
+
+```bash
+"$SK/scripts/run.sh" scan && "$SK/scripts/run.sh" report
+```
+
+直せないもの（拡張がサーバーから外れた、暗号化データが絡む、有料品）は無理に直さず、理由を添えて人に返す。
+SQL インジェクションなどの別の問題に気づいたら、直さずに報告に書く（範囲を広げない）。
+
+## フェーズ 6: 差分と作業票
+
+```bash
+"$SK/scripts/run.sh" finalize
+```
+
+修正を手元の git にコミットし、`.php-upgrade/` に次を作る:
+
+| ファイル | 用途 |
+|---|---|
+| `作業票.md` | 検証環境 → 本番 → 戻し方 のチェックリスト（人が使う） |
+| `アップロード一覧.txt` | 上げるファイル（と削除するファイル） |
+| `元ファイル/` | 変更前のファイル。問題が出たら上げ直して戻す |
+| `修正差分.patch` | 差分（レビュー用） |
+| `一覧表用.tsv` | 棚卸し表の右側に貼る1行（点検日 / 移行先PHP / 判定 / 要修正箇所 / 要更新プラグイン数 / 主な作業） |
+
+`finalize` が「点検し直していません」「UTF-8 に変換したまま」で止まったら、言われた手順を済ませてから再実行する。
+
+最後に人へ伝えること:
+
+- 判定と、修正したファイルの数
+- **検証環境での確認が必須**であること（静的な点検では DB・メール・外部連携の不具合は分からない）
+- `作業票.md` の場所と、`一覧表用.tsv` の1行（そのまま表示して、コピーできるようにする）
+
+## つまずいたとき
+
+| 症状 | 対処 |
+|---|---|
+| `preflight` で PHP が無い | Windows: `winget install PHP.PHP.8.4` → Claude Code を再起動。PHP は点検ツールを動かすためのもので、移行先の版と同じでなくてよい |
+| `setup` で composer が失敗 | インターネット接続を確認。社内プロキシがあれば `HTTPS_PROXY` を設定 |
+| `inventory` で WordPress.org に接続できない | `--offline` で続けられる（その場合、既製品も含めて全部点検するので時間がかかり、指摘も増える） |
+| 点検が遅い | 大きな自作システムは数分かかる。vendor/ は既定で除外している |
+| 点検ツールが読めないファイルがある（`tool_errors`） | 文字コードか、PHP 以外の中身。手で開いて確認する |

@@ -1,0 +1,9 @@
+{
+  "name": "php-upgrade",
+  "version": "1.0.0",
+  "description": "手元に持ってきたPHPサイト（WordPress含む）を、脆弱性の修正が入ったPHPへ上げられるか点検し、自作コードを直して差分と作業票を出す（Windows / macOS / Linux）",
+  "author": {
+    "name": "inoken.ai",
+    "email": "k.inoue@inoken.ai"
+  }
+}

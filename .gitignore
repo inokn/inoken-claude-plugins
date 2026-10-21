@@ -3,3 +3,4 @@ node_modules/
 *.check.png
 *.check-wide.json
 .DS_Store
+__pycache__/
