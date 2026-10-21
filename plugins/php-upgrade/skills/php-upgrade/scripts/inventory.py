@@ -327,11 +327,17 @@ def component_of(path, wp_root, comps_by_path):
     return "site"
 
 
-def walk_php():
+def walk_php(extra=()):
+    """PHP のファイル。extra の拡張子（.htaccess で PHP として動かしているもの）は <? を含むものだけ。"""
     for dirpath, dirnames, filenames in os.walk("."):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
         for fn in sorted(filenames):
-            if Path(fn).suffix.lower() in PHP_EXTS and not is_secret(fn):
+            ext = Path(fn).suffix.lower()
+            if is_secret(fn):
+                continue
+            if ext in PHP_EXTS:
+                yield rel(os.path.join(dirpath, fn))
+            elif ext in extra and b"<?" in Path(dirpath, fn).read_bytes():
                 yield rel(os.path.join(dirpath, fn))
 
 
@@ -362,6 +368,29 @@ comps_by_path = {c["path"]: c["slug"] if c["kind"] in ("mu-plugins", "dropins") 
 scan_ids = {("mu-plugins" if c["kind"] == "mu-plugins" else "dropins" if c["kind"] == "dropins" else f"{c['kind']}:{c['slug']}")
             for c in comps if c.get("scan")}
 
+# .htaccess の php_flag / php_value（PHP の動かし方や版によっては 500 エラーになる）
+REMOVED_INI = {
+    "magic_quotes_gpc": "5.4", "magic_quotes_runtime": "5.4", "magic_quotes_sybase": "5.4", "register_globals": "5.4",
+    "register_long_arrays": "5.4", "safe_mode": "5.4", "allow_call_time_pass_reference": "5.4",
+    "session.bug_compat_42": "5.4", "session.bug_compat_warn": "5.4", "y2k_compliance": "5.4",
+    "asp_tags": "7.0", "always_populate_raw_post_data": "7.0", "session.hash_function": "7.1",
+    "session.hash_bits_per_character": "7.1", "mbstring.func_overload": "8.0", "track_errors": "8.0",
+}
+htaccess = []
+php_exts_extra = set()   # .htaccess で PHP として動かしている拡張子（AddType application/x-httpd-php .html など）
+for dirpath, dirnames, filenames in os.walk("."):
+    dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
+    if ".htaccess" in filenames:
+        f = rel(os.path.join(dirpath, ".htaccess"))
+        for no, line in enumerate(Path(f).read_text("utf-8", "replace").splitlines(), 1):
+            h = re.match(r"\s*(AddType|AddHandler)\s+\S*php\S*\s+(.+)$", line, re.I)
+            if h:
+                php_exts_extra |= {("." + e.lstrip(".")).lower() for e in h.group(2).split() if e.lstrip(".").isalnum()} - PHP_EXTS
+            m = re.match(r"\s*(php_flag|php_value|php_admin_flag|php_admin_value)\s+(\S+)", line, re.I)
+            if m:
+                htaccess.append({"file": f, "line": no, "directive": m.group(1), "name": m.group(2),
+                                 "removed_in": REMOVED_INI.get(m.group(2).lower())})
+
 other_wp = [r for r in wp_roots[1:] if r != wp_root]
 
 
@@ -370,7 +399,7 @@ def under_other_wp(f):
 
 
 files, counts, skipped_secret = [], {}, 0
-for f in walk_php():
+for f in walk_php(php_exts_extra):
     # 2つ目以降の WordPress は、そのフォルダで別に点検する（本体を自作扱いで点検しないように）
     comp = "other-wordpress" if under_other_wp(f) else component_of(f, wp_root, comps_by_path)
     counts[comp] = counts.get(comp, 0) + 1
@@ -390,6 +419,16 @@ if wp_root is not None and (wp_root / "wp-content" / "uploads").is_dir():
         inv["notes"].append(f"⚠️ wp-content/uploads の中に PHP ファイルが {len(up_php)} 件あります（例: {', '.join(up_php[:3])}）。"
                             "画像置き場に PHP があるのは改ざんでよくある形です。中身を確認してください（このスキルは実行も修正もしません）。")
 
+# 認証情報らしき値（パスワードの直書き）を含むファイル。点検・修正はするが、中身を会話に出さない
+SECRET_RE = re.compile(
+    rb"""(?ix)(
+      define\s*\(\s*['"][A-Z0-9_]*(PASS|PASSWORD|PWD|SECRET|API_?KEY|TOKEN)[A-Z0-9_]*['"]\s*,\s*['"][^'"]+['"]
+    | \$[a-z0-9_]*(pass|passwd|password|pwd|secret|api_?key|token)[a-z0-9_]*\s*=\s*['"][^'"]+['"]
+    | (mysql|mysqli)_connect\s*\([^,]*,[^,]*,\s*['"][^'"]+['"]
+    | new\s+(mysqli|PDO)\s*\([^)]*,\s*['"][^'"]+['"]\s*[,)]
+    )""")
+secret_like = [x["file"] for x in files if SECRET_RE.search(Path(x["file"]).read_bytes())]
+
 enc = {}
 for x in files:
     e = detect_encoding(x["file"])
@@ -401,6 +440,9 @@ inv["scan_files"] = files
 inv["file_counts"] = counts
 inv["encodings"] = {k: v for k, v in enc.items()}
 inv["secret_files_skipped"] = skipped_secret
+inv["secret_like"] = secret_like
+inv["htaccess_php"] = htaccess
+inv["php_exts_extra"] = sorted(php_exts_extra)
 if counts.get("vendor") and not a.include_vendor:
     inv["notes"].append(f"composer の vendor/（{counts['vendor']} ファイル）は点検していません。composer の依存は composer update で上げる前提です（--include-vendor で点検対象にできます）。")
 save_json(OUT / "inventory.json", inv)
@@ -427,5 +469,12 @@ if enc:
     print("  ⚠️ UTF-8 以外のファイル: " + ", ".join(f"{k} {len(v)} 件" for k, v in enc.items()) + " → 修正時は文字コードを保つこと")
 if skipped_secret:
     print(f"  認証情報のファイル {skipped_secret} 件は開かずに除外しました")
+if htaccess:
+    rm = [h for h in htaccess if h["removed_in"]]
+    print(f"  ⚠️ .htaccess に PHP の設定が {len(htaccess)} 行" + (f"（うち削除済みの設定 {len(rm)} 行: {', '.join(sorted({h['name'] for h in rm}))}）" if rm else ""))
+if php_exts_extra:
+    print(f"  ⚠️ .htaccess で {', '.join(sorted(php_exts_extra))} も PHP として動かしている → PHP を含むものも点検対象にしました")
+if secret_like:
+    print(f"  🔒 パスワードらしき値を含むファイル: {len(secret_like)} 件（{', '.join(secret_like[:5])}）→ 中身を会話に書き写さないこと")
 for n in inv["notes"]:
     print("  ※ " + n)

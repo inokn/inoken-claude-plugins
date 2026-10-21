@@ -146,6 +146,7 @@ PHPCompatibility はコードを読むだけなので、次は見つけられな
 | 引数が足りない呼び出しが Error になる | 7.1 | 自作関数の定義と呼び出し | 呼び出し側を直すか、引数にデフォルト値を付ける |
 | GD / curl が resource でなくオブジェクトになり、`is_resource()` が false | 8.0 | `is_resource(` | `$img !== false` / `$ch instanceof CurlHandle` などに |
 | ArrayAccess / Iterator / Countable / JsonSerializable を実装したクラスで、戻り値の型がないと非推奨 | 8.1 | `implements ArrayAccess` など | メソッドの前に `#[\ReturnTypeWillChange]`（7.x では無視される） |
+| `.htaccess` の `php_flag` / `php_value` でサイト全体が 500 エラー | — | `inventory.json` の `htaccess_php` | 削除された設定（magic_quotes_gpc など）は行ごと消す。PHP が php-fpm / CGI で動くサーバーでは `php_flag` 自体が使えないので、必要な設定は `.user.ini` に移す（`php_value mbstring.internal_encoding SJIS` → `.user.ini` に `default_charset = "Shift_JIS"` など、意味を確かめて） |
 | `htmlspecialchars()` の既定がシングルクォートも変換するように | 8.1 | — | 通常は安全側の変化なので直さない |
 | 未定義の変数・添字の Notice が Warning に格上げ | 8.0 | — | 表示設定によっては画面に出る。検証環境のログで確認 |
 

@@ -136,6 +136,15 @@ for cid in ext_with_err:
     c = comps.get(cid, {})
     tasks.append(("必須", f"{comp_label(cid)}: {n} 箇所。有料・外部配布なら販売元の最新版に更新、自作なら修正（{c.get('note', '出どころ要確認')}）"))
 
+ht = inv.get("htaccess_php") or []
+if ht and not patch_only:
+    rm = [h for h in ht if h["removed_in"]]
+    if rm:
+        tasks.append(("必須", ".htaccess の削除済みの PHP 設定を消す（残すと 500 エラーになりうる）: "
+                      + ", ".join(f"`{h['file']}:{h['line']}` {h['name']}（{h['removed_in']} で削除）" for h in rm[:5])))
+    tasks.append(("確認", f".htaccess に php_flag / php_value が {len(ht)} 行ある。サーバーが php-fpm / CGI で動いていると、"
+                  "この行があるだけで 500 エラーになる。移行先の PHP の動かし方を確認（必要なら .user.ini へ移す）"))
+
 if inv.get("uploads_php"):
     tasks.append(("確認", f"wp-content/uploads の中の PHP ファイル {len(inv['uploads_php'])} 件を確認（改ざんの疑い）: "
                   + ", ".join(inv["uploads_php"][:3])))
@@ -181,6 +190,8 @@ fix_names = [comps[c]["slug"] if c in comps else {"site": "サイト本体", "or
              for c in edit_comps + ext_with_err]
 if fix_names:
     mw.append("修正: " + ", ".join(fix_names))
+if any(t.startswith(".htaccess の削除済み") for _, t in tasks):
+    mw.append(".htaccess修正")
 if any("配布停止" in t for _, t in tasks):
     mw.append("配布停止プラグインの置き換え")
 if any(t.startswith("composer.json") and l == "必須" for l, t in tasks):
@@ -302,6 +313,20 @@ if not patch_only:
         if scan.get("tool_errors"):
             L.append(f"⚠️ 点検ツールが読めなかったファイルが {len(scan['tool_errors'])} 件あります（scan.json の tool_errors）。手で確認してください。")
             L.append("")
+
+sl = inv.get("secret_like") or []
+if sl:
+    L.append("## 🔒 パスワードらしき値を含むファイル")
+    L.append("")
+    L.append("次のファイルには、DB のパスワードなどが直接書かれているようです。点検・修正の対象ですが、**値はレポートや会話に書き写していません**。")
+    L.append("")
+    for x in sl[:30]:
+        L.append(f"- `{x}`")
+    if len(sl) > 30:
+        L.append(f"- ほか {len(sl) - 30} 件")
+    L.append("")
+    L.append("公開ディレクトリにパスワードを直書きしている状態は、PHP の移行とは別に見直しを勧めます（設定ファイルを公開ディレクトリの外へ移す、など）。")
+    L.append("")
 
 enc = inv.get("encodings") or {}
 if enc:

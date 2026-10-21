@@ -25,7 +25,10 @@ SK="<このスキルのベースディレクトリ>"
 ## 守ること（安全ルール）
 
 1. **サーバーに接続しない。** ftp / sftp / rclone / WinSCP / curl のアップロードなど、サーバーへ送るコマンドは使わない。頼まれても、作業票に書いて人に渡す
-2. **認証情報を読まない。** `wp-config.php`、`.env`、`*.sql` を Read / cat / grep しない。中身を表示しない（スクリプトも開かない）
+2. **認証情報を読まない。** `wp-config.php`、`.env`、`*.sql` を Read / cat / grep しない。中身を表示しない（スクリプトも開かない）。
+   自作サイトの `config.php` などでパスワードが直書きされているファイルは `inventory.json` の `secret_like` に載る。
+   これらは直してよいが、**直す行の前後だけを見て（Grep の行番号 → Read の offset/limit）、パスワード・ユーザー名・ホスト名などの値を会話・報告・確認事項.md に書き写さない**。
+   ファイル全体を cat / Read で表示しない
 3. **作業フォルダの外を変更しない。** WordPress 本体・WordPress.org 配布のプラグイン・有料プラグインのファイルは直さない（`references/wordpress.md`）
 4. **Shift_JIS / EUC-JP のファイルは `run.sh recode` を通して直す**（`references/php-changes.md` 4章）
 5. `wp-content/uploads` に PHP が見つかったら、**開いて実行したり消したりしない**。報告だけする（改ざんの疑い）

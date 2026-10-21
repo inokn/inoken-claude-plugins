@@ -14,7 +14,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from common import OUT, branch, die, require, save_json, today, tools_dir
+from common import OUT, PHP_EXTS, branch, die, require, save_json, today, tools_dir
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--force", action="store_true", help="パッチ更新でも点検する")
@@ -69,7 +69,8 @@ flist = OUT / "scan-files.txt"
 flist.write_text("\n".join(files) + "\n", encoding="utf-8")
 rep = OUT / "phpcs.json"
 cmd = [PHP, "-d", "memory_limit=2G", str(PHPCS), f"--standard={std}", "--runtime-set", "testVersion", tgt["target_branch"],
-       "--report=json", f"--report-file={rep}", f"--file-list={flist}", "--basepath=.", "-q", "--no-colors", "-s"]
+       "--report=json", f"--report-file={rep}", f"--file-list={flist}", "--basepath=.", "-q", "--no-colors", "-s",
+       "--extensions=" + ",".join(sorted({e.lstrip(".") for e in PHP_EXTS} | {e.lstrip(".") for e in inv.get("php_exts_extra", [])}))]
 if os.name != "nt":
     cmd.append("--parallel=4")
 print(f"点検中: {len(files)} ファイル（{std} / PHP {tgt['target_branch']}）...")
